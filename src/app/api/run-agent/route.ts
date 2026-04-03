@@ -8,7 +8,7 @@ const client = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { prompt } = await req.json();
+    const { prompt, stdin } = await req.json();
 
     const result = await client.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       .replace(/```python\n?|```\n?/g, "")
       .trim();
 
-    const executePython = async (code: string) => {
+    const executePython = async (code: string, stdin: string) => {
       const response = await fetch(
         "https://ce.judge0.com/submissions?base64_encoded=false&wait=true",
         {
@@ -33,9 +33,10 @@ export async function POST(req: Request) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            language_id: 71,
-            source_code: code,
+         body: JSON.stringify({
+  language_id: 71,
+  source_code: code,
+  stdin: stdin || ""  // 👈 ADD THIS
           }),
         }
       );
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
       };
     };
 
-    const executionResult = await executePython(code);
+    const executionResult = await executePython(code, stdin);
 
     return NextResponse.json({
       code,

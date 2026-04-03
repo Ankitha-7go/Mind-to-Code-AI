@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import fs from "fs";
-import path from "path";
 import OpenAI from "openai";
 
 const client = new OpenAI({
@@ -9,45 +6,29 @@ const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
 });
 
-function runPython(filePath: string): Promise<{ output: string; error: string }> {
-  return new Promise((resolve) => {
-    const cmd = process.platform === "win32" ? `python "${filePath}"` : `python3 "${filePath}"`;
-    exec(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
-      if (error) {
-        resolve({ output: "", error: stderr || error.message });
-      } else {
-        resolve({ output: stdout, error: "" });
-      }
-    });
-  });
-}
 
 export async function POST(req: Request) {
-  try {
-    const { prompt } = await req.json();
+  const { prompt } = await req.json();
 
-    let code = "";
-    let result = { output: "", error: "" };
+  const result = await client.chat.completions.create({
+    model: "openai/gpt-3.5-turbo",
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `Return ONLY Python code for: ${prompt}`,
+      },
+    ],
+  });
 
-const gen = await client.chat.completions.create({
-  model: "openai/gpt-3.5-turbo",
-  max_tokens: 500,
-  messages: [
-    {
-      role: "user",
-      content: `You are a professional Python code generator.
+  const code = result.choices[0].message.content || "";
 
-STRICT RULES:
-- Return ONLY valid Python code
-- NO explanations
-- NO markdown
-- NO backticks
-
-Task:
-${prompt}`,
-    },
-  ],
-});
+  return NextResponse.json({
+    code,
+    output: "Execution disabled on Vercel",
+    error: "",
+  });
+}
 
 code = (gen.choices[0].message.content || "")
   .replace(/```python\n?|```\n?/g, "")

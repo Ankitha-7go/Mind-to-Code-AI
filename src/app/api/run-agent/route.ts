@@ -25,36 +25,44 @@ export async function POST(req: Request) {
       .replace(/```python\n?|```\n?/g, "")
       .trim();
 
-    // ✅ REAL EXECUTION (Judge0 free endpoint)
     const executePython = async (code: string) => {
-  const submit = await fetch(
-    "https://ce.judge0.com/submissions?base64_encoded=false&wait=false",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        language_id: 71,
-        source_code: code,
-      }),
-    }
-  );
+      const response = await fetch(
+        "https://ce.judge0.com/submissions?base64_encoded=false&wait=true",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            language_id: 71,
+            source_code: code,
+          }),
+        }
+      );
 
-  const submitData = await submit.json();
-  const token = submitData.token;
+      const data = await response.json();
 
-  // wait for result
-  await new Promise((r) => setTimeout(r, 2000));
+      return {
+        output: data.stdout || data.compile_output || "",
+        error: data.stderr || "",
+      };
+    };
 
-  const result = await fetch(
-    `https://ce.judge0.com/submissions/${token}?base64_encoded=false`
-  );
+    const executionResult = await executePython(code);
 
-  const data = await result.json();
+    return NextResponse.json({
+      code,
+      output: executionResult.output,
+      error: executionResult.error,
+      attempts: 1,
+    });
 
-  return {
-    output: data.stdout || data.compile_output || "",
-    error: data.stderr || "",
-  };
-};
+  } catch (err: any) {
+    return NextResponse.json({
+      code: "",
+      output: "",
+      error: err.message || "Internal error",
+      attempts: 0,
+    });
+  }
+}

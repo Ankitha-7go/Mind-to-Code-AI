@@ -151,7 +151,6 @@ function CodeEditor() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState<string>("idle");
-  const [stdin, setStdin] = useState("");
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -159,7 +158,6 @@ function CodeEditor() {
     setLoading(true);
     setResponse(null);
     setStep("generating");
-    setStdin("");
 
     try {
       const res = await fetch("/api/generate", {
@@ -179,18 +177,15 @@ function CodeEditor() {
 
       setResponse(newResponse);
       setStep("done");
-      setStdin("");
 
-      const hasInput = /\binput\s*\(/.test(newResponse.code);
-
-      if (newResponse.code && !hasInput) {
+      if (newResponse.code) {
         setRunning(true);
         setStep("running");
         
         const runRes = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: newResponse.code, stdin: "" }),
+          body: JSON.stringify({ code: newResponse.code }),
         });
         const runData = await runRes.json();
         
@@ -225,7 +220,6 @@ function CodeEditor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: response.code,
-          stdin: stdin,
         }),
       });
 
@@ -322,20 +316,8 @@ function CodeEditor() {
             {response.code}
           </pre>
 
-          {response.code && /\binput\s*\(/.test(response.code) && (
-            <div className="px-4 py-3 border-t border-white/10">
-              <label className="text-xs text-gray-400 mb-2 block">Runtime Input (one value per line)</label>
-              <textarea
-                className="w-full h-16 p-2 rounded-lg bg-[#111] border border-white/10 text-white outline-none focus:border-cyan-500/50 font-mono text-sm resize-none"
-                placeholder={"Enter each value on a new line\nExample:\n10\n20"}
-                value={stdin}
-                onChange={(e) => setStdin(e.target.value)}
-              />
-            </div>
-          )}
-
           <div className="p-4 border-t border-white/10 flex justify-between items-center">
-            <span className="text-xs text-gray-500">Click Run to execute code</span>
+            <span className="text-xs text-gray-500">Code runs automatically with sample values</span>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}

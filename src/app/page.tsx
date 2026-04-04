@@ -138,53 +138,116 @@ function TerminalDemo() {
   );
 }
 
-function CodeEditor({ prompt, setPrompt, loading, setLoading, response, setResponse, setStep }: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  loading: boolean;
-  setLoading: (v: boolean) => void;
-  response: any;
-  setResponse: (v: any) => void;
-  setStep: (v: string) => void;
-}) {
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+interface ResponseData {
+  code: string;
+  output: string;
+  error: string;
+  attempts?: number;
+}
+
+function CodeEditor() {
+  const [prompt, setPrompt] = useState("");
+  const [response, setResponse] = useState<ResponseData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState<string>("idle");
+  const [stdin, setStdin] = useState("");
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    
     setLoading(true);
     setResponse(null);
-
-    setStep("thinking");
-    await sleep(800);
-
-    setStep("planning");
-    await sleep(1000);
-
-    setStep("coding");
-    await sleep(1200);
-
-    setStep("executing");
+    setStep("generating");
+    setStdin("");
 
     try {
-      const res = await fetch("/api/run-agent", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
+
       const data = await res.json();
 
-      setStep("analyzing");
-      await sleep(500);
+      const newResponse = {
+        code: data.code || "",
+        output: data.output || "",
+        error: data.error || "",
+        attempts: data.attempts || 1,
+      };
 
+      setResponse(newResponse);
       setStep("done");
-      setResponse(data);
+      setStdin("");
+
+      const hasInput = /\binput\s*\(/.test(newResponse.code);
+
+      if (newResponse.code && !hasInput) {
+        setRunning(true);
+        setStep("running");
+        
+        const runRes = await fetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: newResponse.code, stdin: "" }),
+        });
+        const runData = await runRes.json();
+        
+        setResponse(prev => prev ? {
+          ...prev,
+          output: runData.output || "",
+          error: runData.error || "",
+        } : null);
+      }
     } catch (err) {
-      setResponse({ code: "", output: "", error: "Failed to generate code" });
+      setResponse({
+        code: "",
+        output: "",
+        error: "Failed to generate code. Please try again.",
+      });
+      setStep("done");
+    } finally {
+      setLoading(false);
+      setRunning(false);
+    }
+  };
+
+  const handleRun = async () => {
+    if (!response?.code) return;
+
+    setRunning(true);
+    setStep("running");
+
+    try {
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: response.code,
+          stdin: stdin,
+        }),
+      });
+
+      const data = await res.json();
+
+      setResponse((prev) => prev ? {
+        ...prev,
+        output: data.output || "",
+        error: data.error || "",
+      } : null);
+    } catch (err) {
+      setResponse((prev) => prev ? {
+        ...prev,
+        error: "Execution failed. Please try again.",
+      } : null);
+    } finally {
+      setRunning(false);
       setStep("done");
     }
-
-    setLoading(false);
   };
+
+  const hasCode = response?.code && response.code.length > 0;
 
   return (
     <motion.div
@@ -203,16 +266,32 @@ function CodeEditor({ prompt, setPrompt, loading, setLoading, response, setRespo
         <div className="p-6">
           <textarea
             className="w-full h-32 p-4 rounded-lg bg-[#111] border border-white/10 text-white placeholder-gray-500 outline-none focus:border-cyan-500/50 transition-colors resize-none font-mono text-sm"
-            placeholder="Describe what you want to build..."
+            placeholder="e.g. Write a program to find factorial of a number using input()"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !loading && prompt.trim()) {
+                e.preventDefault();
+                handleGenerate();
+              }
+            }}
             disabled={loading}
           />
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               {loading && (
                 <span className="text-cyan-400 text-sm animate-pulse">
-                  {response ? "Complete" : "Generating..."}
+                  Generating...
+                </span>
+              )}
+              {running && (
+                <span className="text-yellow-400 text-sm animate-pulse">
+                  Running...
+                </span>
+              )}
+              {!loading && !running && prompt.trim() && (
+                <span className="text-gray-500 text-xs">
+                  Press Ctrl+Enter to generate
                 </span>
               )}
             </div>
@@ -229,7 +308,7 @@ function CodeEditor({ prompt, setPrompt, loading, setLoading, response, setRespo
         </div>
       </div>
 
-      {response && (
+      {response && hasCode && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -240,29 +319,50 @@ function CodeEditor({ prompt, setPrompt, loading, setLoading, response, setRespo
             <span className="text-gray-500 text-sm">Attempts: {response.attempts || 1}</span>
           </div>
           <pre className="p-4 text-sm text-green-300 overflow-x-auto max-h-64 font-mono">
-            {response.code || "No code generated"}
+            {response.code}
           </pre>
 
-          {response.output && (
-            <>
-              <div className="p-4 bg-white/5 border-t border-white/10 border-b border-white/10">
-                <span className="text-cyan-400 font-medium">Output</span>
-              </div>
-              <pre className="p-4 text-sm text-cyan-300 overflow-x-auto font-mono">
-                {response.output}
+          {response.code && /\binput\s*\(/.test(response.code) && (
+            <div className="px-4 py-3 border-t border-white/10">
+              <label className="text-xs text-gray-400 mb-2 block">Runtime Input (one value per line)</label>
+              <textarea
+                className="w-full h-16 p-2 rounded-lg bg-[#111] border border-white/10 text-white outline-none focus:border-cyan-500/50 font-mono text-sm resize-none"
+                placeholder={"Enter each value on a new line\nExample:\n10\n20"}
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="p-4 border-t border-white/10 flex justify-between items-center">
+            <span className="text-xs text-gray-500">Click Run to execute code</span>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleRun}
+              disabled={running || !hasCode}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {running ? "Running..." : "Run Code"}
+            </motion.button>
+          </div>
+
+          {response.output !== undefined && response.output !== null && (
+            <div className="p-4 bg-white/5 border-t border-white/10">
+              <span className="text-cyan-400 font-medium">Output</span>
+              <pre className="mt-2 text-sm text-cyan-300 overflow-x-auto font-mono whitespace-pre-wrap">
+                {response.output || "(No output)"}
               </pre>
-            </>
+            </div>
           )}
 
           {response.error && (
-            <>
-              <div className="p-4 bg-white/5 border-t border-white/10 border-b border-white/10">
-                <span className="text-red-400 font-medium">Error</span>
-              </div>
-              <pre className="p-4 text-sm text-red-300 overflow-x-auto font-mono">
+            <div className="p-4 bg-red-500/10 border-t border-red-500/30">
+              <span className="text-red-400 font-medium">Error</span>
+              <pre className="mt-2 text-sm text-red-300 overflow-x-auto font-mono whitespace-pre-wrap">
                 {response.error}
               </pre>
-            </>
+            </div>
           )}
         </motion.div>
       )}
@@ -277,11 +377,6 @@ export default function Home() {
     offset: ["start end", "end start"],
   });
   const y = useTransform(scrollYProgress, [0, 1], [0, -100]);
-
-  const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState("idle");
 
   const steps = [
     { title: "Plan", description: "AI analyzes your request and creates an execution strategy", icon: "📋" },
@@ -395,27 +490,7 @@ export default function Home() {
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Try It Now</h2>
             <p className="text-gray-400 text-lg">Describe what you want to build</p>
           </motion.div>
-          <CodeEditor
-            prompt={prompt}
-            setPrompt={setPrompt}
-            loading={loading}
-            setLoading={setLoading}
-            response={response}
-            setResponse={setResponse}
-            setStep={setStep}
-          />
-          {loading && (
-            <div className="mt-6 text-center">
-              <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/5 border border-white/10">
-                {step === "thinking" && <span className="text-purple-400">Analyzing request...</span>}
-                {step === "planning" && <span className="text-cyan-400">Planning solution...</span>}
-                {step === "coding" && <span className="text-green-400">Generating code...</span>}
-                {step === "executing" && <span className="text-yellow-400">Running sandbox...</span>}
-                {step === "analyzing" && <span className="text-pink-400">Analyzing results...</span>}
-                {step === "done" && <span className="text-green-400">Complete</span>}
-              </div>
-            </div>
-          )}
+          <CodeEditor />
         </section>
 
         <section className="py-32 px-4">

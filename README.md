@@ -1,5 +1,22 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Setup
+
+1. Copy the environment variables:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. Get API keys:
+   - **OpenRouter**: Sign up at [openrouter.ai](https://openrouter.ai) and get an API key
+   - **Anthropic** (optional): Sign up at [anthropic.com](https://anthropic.com) and get an API key for Claude
+
+3. Add your API keys to `.env.local`:
+   ```
+   OPENROUTER_API_KEY=your_openrouter_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   ```
+
 ## Getting Started
 
 First, run the development server:

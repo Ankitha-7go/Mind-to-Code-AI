@@ -366,7 +366,7 @@ print(f"You asked for: {prompt}")
       }
     }
   }
-}
+
 
 export async function POST(req: Request) {
   try {

@@ -309,24 +309,78 @@ function CodeEditor() {
           className="mt-6 rounded-2xl overflow-hidden border border-white/10 bg-black/80 backdrop-blur-xl"
         >
           <div className="p-4 bg-white/5 border-b border-white/10 flex justify-between items-center">
-            <span className="text-green-400 font-medium">Generated Code</span>
+            <span className="text-green-400 font-medium">Code</span>
             <span className="text-gray-500 text-sm">Attempts: {response.attempts || 1}</span>
           </div>
-          <pre className="p-4 text-sm text-green-300 overflow-x-auto max-h-64 font-mono">
-            {response.code}
-          </pre>
+          <div className="rounded-lg bg-[#0d1117] p-4 m-4 border border-green-500/20 overflow-x-auto max-h-64">
+            <pre className="text-sm text-green-300 font-mono">
+              {(() => {
+                const lines = response.code.split('\n');
+                let lineNum = 0;
+                return lines.map((line: string) => {
+                  if (line.trim() === '' || line.trim().startsWith('#')) {
+                    return '';
+                  }
+                  lineNum++;
+                  return `${lineNum}. ${line}`;
+                }).filter(Boolean).join('\n');
+              })()}
+            </pre>
+          </div>
 
-          <div className="p-4 border-t border-white/10 flex justify-between items-center">
-            <span className="text-xs text-gray-500">Code runs automatically with sample values</span>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleRun}
-              disabled={running || !hasCode}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {running ? "Running..." : "Run Code"}
-            </motion.button>
+          <div className="px-4 pb-2">
+            <span className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-400">Comments</span>
+          </div>
+
+          <div className="px-4 pb-4">
+            <div className="rounded-lg bg-[#1a1b26] p-4 mx-4 border border-yellow-500/20 overflow-x-auto max-h-64">
+              <pre className="text-sm text-yellow-400 font-mono">
+                {(() => {
+                  const codeLines = response.code.split('\n').filter((line: string) => line.trim() !== '' && !line.trim().startsWith('#'));
+                  return codeLines.map((line: string, idx: number) => {
+                    const lineNum = idx + 1;
+                    let comment = '';
+                    const trimmed = line.trim();
+                    
+                    if (trimmed.startsWith('def ')) {
+                      const match = trimmed.match(/def\s+(\w+)\s*\((.*)\)/);
+                      if (match) {
+                        comment = `Define function "${match[1]}" with parameters: ${match[2] || 'none'}`;
+                      }
+                    } else if (trimmed.startsWith('for ')) {
+                      comment = 'Loop through elements';
+                    } else if (trimmed.startsWith('if ')) {
+                      comment = 'Check condition';
+                    } else if (trimmed.startsWith('elif ')) {
+                      comment = 'Else-if condition';
+                    } else if (trimmed.startsWith('else:')) {
+                      comment = 'Else condition';
+                    } else if (trimmed.startsWith('while ')) {
+                      comment = 'While loop';
+                    } else if (trimmed.startsWith('return ')) {
+                      comment = 'Return value';
+                    } else if (trimmed.startsWith('print(')) {
+                      comment = 'Print output to console';
+                    } else if (trimmed.includes('=') && !trimmed.includes('==')) {
+                      if (trimmed.includes('[') && trimmed.includes(']')) {
+                        comment = 'Define a list/array';
+                      } else if (trimmed.includes('int(') || trimmed.includes('str(')) {
+                        comment = 'Convert value to integer/string';
+                      } else {
+                        const varName = trimmed.split('=')[0].trim();
+                        comment = `Assign value to variable "${varName}"`;
+                      }
+                    } else if (trimmed.includes('//') || trimmed.includes('%') || trimmed.includes('*')) {
+                      comment = 'Perform arithmetic operation';
+                    } else {
+                      comment = 'Execute statement';
+                    }
+                    
+                    return `${lineNum}. ${comment}`;
+                  }).join('\n');
+                })()}
+              </pre>
+            </div>
           </div>
 
           {response.output !== undefined && response.output !== null && (

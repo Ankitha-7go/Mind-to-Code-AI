@@ -6,6 +6,8 @@ import path from "path";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { code, stdin } = await req.json();
+    console.log("CODE RECEIVED:", code);
+    console.log("STDIN RECEIVED:", stdin);
 
     if (!code) {
       return NextResponse.json(
@@ -33,10 +35,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
 
       // ✅ Send input (THIS WAS YOUR MAIN PROBLEM)
-      if (stdin) {
-        process.stdin.write(stdin + "\n");
-      }
-
+      if (stdin && stdin.trim().length > 0) {
+  console.log("STDIN RECEIVED:", stdin);
+  process.stdin.write(stdin + "\n");
+}
       process.stdin.end();
 
       process.on("close", () => {

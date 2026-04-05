@@ -1,34 +1,32 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import { exec } from "child_process";
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<NextResponse> {
   try {
-    const { code, stdin } = await req.json();
+    const { code } = await req.json();
 
-    const response = await fetch(
-      "https://ce.judge0.com/submissions?base64_encoded=false&wait=true",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          language_id: 71, // Python
-          source_code: code,
-          stdin: stdin || "",
-        }),
-      }
-    );
+    if (!code || typeof code !== "string") {
+      return NextResponse.json({ output: "", error: "Code is required" }, { status: 400 });
+    }
 
-    const data = await response.json();
+    const filePath = path.join(process.cwd(), "temp.py");
+    fs.writeFileSync(filePath, code, "utf-8");
 
-    return NextResponse.json({
-      output: data.stdout || data.compile_output || "",
-      error: data.stderr || "",
+    const result = await new Promise<{ output: string; error: string }>((resolve) => {
+      const cmd = process.platform === "win32" ? `python "${filePath}"` : `python3 "${filePath}"`;
+      exec(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+        if (error) {
+          resolve({ output: "", error: stderr || error.message });
+        } else {
+          resolve({ output: stdout, error: "" });
+        }
+      });
     });
+
+    return NextResponse.json(result);
   } catch (err: any) {
-    return NextResponse.json({
-      output: "",
-      error: err.message || "Execution failed",
-    });
+    return NextResponse.json({ output: "", error: err.message || "Execution failed" });
   }
 }
